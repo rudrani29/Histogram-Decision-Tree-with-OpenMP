@@ -14,4 +14,4 @@ test_tree: tests/test_tree.cpp src/tree_serial.cpp src/hist.cpp src/split_final.
 clean:
 	rm -f hist_tree gen_data test_a test_tree
 test_hist_omp: tests/test_hist_omp.cpp src/hist.cpp src/hist_omp.cpp src/common.h
-   	$(CXX) $(CXXFLAGS) tests/test_hist_omp.cpp src/hist.cpp src/hist_omp.cpp -o test_hist_omp
+	$(CXX) $(CXXFLAGS) tests/test_hist_omp.cpp src/hist.cpp src/hist_omp.cpp -o test_hist_omp
