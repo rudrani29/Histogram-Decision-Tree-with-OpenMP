@@ -20,11 +20,22 @@ struct Tree
 // The "hook": which function builds a histogram. Swap in build_hist_omp later.
 using HistFn = std::function<Hist(const Dataset &, const std::vector<int> &)>;
 
+// Seconds spent in each phase during the last train_tree call (for the Amdahl discussion).
+struct TrainStats
+{
+    double hist_s = 0, split_s = 0, part_s = 0;
+};
+extern TrainStats g_stats;
+
 void partition(const Dataset &ds, const std::vector<int> &rows, int feature, int bin,
                std::vector<int> &left, std::vector<int> &right);
 
-Tree train_tree(const Dataset &ds, const Params &p, HistFn hist_fn);
+// Trains on rows [0, n_train). n_train < 0 means all N rows.
+Tree train_tree(const Dataset &ds, const Params &p, HistFn hist_fn, int n_train = -1);
+
 float predict_row(const Tree &t, const Dataset &ds, int row);
 std::vector<float> predict_all(const Tree &t, const Dataset &ds);
 double rmse(const std::vector<float> &pred, const std::vector<float> &y);
+// RMSE of the tree over rows [begin, end)
+double rmse_range(const Tree &t, const Dataset &ds, int begin, int end);
 void print_tree(const Tree &t, int node = 0, int indent = 0);

@@ -1,0 +1,4 @@
+mode,bins,N,threads,depth,subtraction,par_split,hist_omp,schedule,cutoff,bin_time,train_time,hist_time,split_time,part_time,rmse_train,rmse_test,nodes
+hist,256,1000000,1,6,1,0,0,static,2048,7.071,0.265,0.177999,0.0160004,0.0690011,2.37019,2.36756,127
+hist,256,1000000,1,6,1,0,0,static,2048,7.693,0.28,0.18,0.0180005,0.0790006,2.37019,2.36756,127
+hist,256,1000000,1,6,1,0,0,static,2048,7.093,0.256,0.165999,0.0140003,0.0709999,2.37019,2.36756,127

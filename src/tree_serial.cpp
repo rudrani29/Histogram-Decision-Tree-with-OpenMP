@@ -2,6 +2,9 @@
 #include <cmath>
 #include <cstdio>
 #include <numeric>
+#include <omp.h>
+
+TrainStats g_stats;
 
 void partition(const Dataset &ds, const std::vector<int> &rows, int feature, int bin,
                std::vector<int> &left, std::vector<int> &right)
@@ -17,59 +20,110 @@ void partition(const Dataset &ds, const std::vector<int> &rows, int feature, int
     }
 }
 
+// Sum of y and count over bins [lo, hi] of one feature's histogram.
+static void range_stats(const Hist &h, int f, int lo, int hi, double &S, uint32_t &n)
+{
+    S = 0;
+    n = 0;
+    const Bin *hf = &h[(size_t)f * NBINS];
+    for (int b = lo; b <= hi; ++b)
+    {
+        S += hf[b].sum_y;
+        n += hf[b].cnt;
+    }
+}
+
 // Recursive node expansion. Returns the index of the node it created.
+// h      : this node's histogram. May be nullptr only if depth >= max_depth (a forced leaf).
+// S, n   : sum of y and row count of this node (known from the parent's split, so a
+//          node that is a forced leaf never needs its own histogram).
 // NOTE: always use indices, never keep a reference into t.nodes across a
-// recursive call (push_back may reallocate the vector).
-static int grow(Tree &t, const Dataset &ds, const std::vector<int> &rows,
-                int depth, const Params &p, const HistFn &hist_fn)
+// recursive call (emplace_back may reallocate the vector).
+static int grow(Tree &t, const Dataset &ds, const std::vector<int> &rows, const Hist *h,
+                double S, uint32_t n, int depth, const Params &p, const HistFn &hist_fn)
 {
     int idx = (int)t.nodes.size();
     t.nodes.emplace_back();
     t.nodes[idx].depth = depth;
-
-    // 1. histogram for this node (A will add the subtraction trick here later)
-    Hist h = hist_fn(ds, rows);
-
-    // node mean: sum over all bins of feature 0 gives total sum_y and count
-    double S = 0;
-    uint32_t n = 0;
-    for (int b = 0; b < 256; ++b)
-    {
-        S += h[b].sum_y;
-        n += h[b].cnt;
-    }
     t.nodes[idx].value = n ? (float)(S / n) : 0.f;
 
-    // 2. stop conditions
+    // stop conditions
     if (depth >= p.max_depth || (int)n < 2 * p.min_leaf)
         return idx;
 
-    // 3. best split (A's function)
-    Split s = find_best_split(h, ds.D, p.min_leaf);
+    // best split (A's functions)
+    double t0 = omp_get_wtime();
+    Split s = p.par_split ? find_best_split_omp(*h, ds.D, p.min_leaf)
+                          : find_best_split(*h, ds.D, p.min_leaf);
+    g_stats.split_s += omp_get_wtime() - t0;
     if (s.feature < 0 || s.gain < p.min_gain)
         return idx;
 
-    // 4. divide rows, recurse
+    // divide rows
+    t0 = omp_get_wtime();
     std::vector<int> L, R;
     partition(ds, rows, s.feature, s.bin, L, R);
+    g_stats.part_s += omp_get_wtime() - t0;
     if (L.empty() || R.empty())
         return idx;
 
+    // child statistics straight from the parent's histogram (no extra pass over rows)
+    double SL, SR;
+    uint32_t nL, nR;
+    range_stats(*h, s.feature, 0, s.bin, SL, nL);
+    range_stats(*h, s.feature, s.bin + 1, NBINS - 1, SR, nR);
+
+    // child histograms: only needed if a child can still split
+    Hist hl, hr;
+    bool child_leaf = (depth + 1 >= p.max_depth);
+    if (!child_leaf)
+    {
+        t0 = omp_get_wtime();
+        if (p.use_subtraction)
+        {
+            // build the smaller child, get the larger one as parent - small
+            bool left_small = L.size() <= R.size();
+            Hist small = hist_fn(ds, left_small ? L : R);
+            Hist large = subtract(*h, small);
+            hl = left_small ? std::move(small) : std::move(large);
+            hr = left_small ? std::move(large) : std::move(small);
+        }
+        else
+        {
+            hl = hist_fn(ds, L);
+            hr = hist_fn(ds, R);
+        }
+        g_stats.hist_s += omp_get_wtime() - t0;
+    }
+
     t.nodes[idx].feature = s.feature;
     t.nodes[idx].bin = s.bin;
-    int l = grow(t, ds, L, depth + 1, p, hist_fn);
-    int r = grow(t, ds, R, depth + 1, p, hist_fn);
+    int l = grow(t, ds, L, child_leaf ? nullptr : &hl, SL, nL, depth + 1, p, hist_fn);
+    int r = grow(t, ds, R, child_leaf ? nullptr : &hr, SR, nR, depth + 1, p, hist_fn);
     t.nodes[idx].left = l;
     t.nodes[idx].right = r;
     return idx;
 }
 
-Tree train_tree(const Dataset &ds, const Params &p, HistFn hist_fn)
+Tree train_tree(const Dataset &ds, const Params &p, HistFn hist_fn, int n_train)
 {
+    if (n_train < 0 || n_train > ds.N)
+        n_train = ds.N;
+    g_stats = TrainStats();
+
     Tree t;
-    std::vector<int> rows(ds.N);
+    std::vector<int> rows(n_train);
     std::iota(rows.begin(), rows.end(), 0);
-    grow(t, ds, rows, 0, p, hist_fn);
+
+    // root histogram (always built; it is the only node with no parent to subtract from)
+    double t0 = omp_get_wtime();
+    Hist root = hist_fn(ds, rows);
+    g_stats.hist_s += omp_get_wtime() - t0;
+
+    double S;
+    uint32_t n;
+    range_stats(root, 0, 0, NBINS - 1, S, n); // every row falls in exactly one bin of feature 0
+    grow(t, ds, rows, &root, S, n, 0, p, hist_fn);
     return t;
 }
 
@@ -101,6 +155,17 @@ double rmse(const std::vector<float> &pred, const std::vector<float> &y)
         s += d * d;
     }
     return std::sqrt(s / y.size());
+}
+
+double rmse_range(const Tree &t, const Dataset &ds, int begin, int end)
+{
+    double s = 0;
+    for (int i = begin; i < end; ++i)
+    {
+        double d = (double)predict_row(t, ds, i) - ds.y[i];
+        s += d * d;
+    }
+    return std::sqrt(s / (end - begin));
 }
 
 void print_tree(const Tree &t, int k, int indent)

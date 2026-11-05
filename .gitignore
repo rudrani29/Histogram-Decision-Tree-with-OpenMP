@@ -1,0 +1,13 @@
+
+*.exe
+*.o
+data/*.bin
+.vscode/
+*.exe
+*.o
+.vscode/
+data/*.bin
+hist_tree
+gen_data
+test_a
+test_tree
