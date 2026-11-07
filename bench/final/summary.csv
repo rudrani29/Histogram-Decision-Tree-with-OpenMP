@@ -1,0 +1,21 @@
+experiment,setting,median_time_s,speedup,rmse_test
+story,Exact (sort-based),25.363,1.0,2.36884
+story,"Histogram serial, no subtraction",0.486,52.18724279835391,2.36756
+story,Histogram serial + subtraction,0.279,90.90681003584228,2.36756
+story,Histogram OpenMP (8 threads),0.197,128.746192893401,2.36756
+scaling,1 threads,0.283,1.0,
+scaling,2 threads,0.241,1.1742738589211617,
+scaling,4 threads,0.244,1.1598360655737705,
+scaling,6 threads,0.261,1.0842911877394634,
+scaling,8 threads,0.274,1.032846715328467,
+cutoff,0,0.516999,,
+cutoff,512,0.511999,,
+cutoff,2048,0.458001,,
+cutoff,8192,0.437,,
+cutoff,32768,0.443998,,
+sched,schedule=static,0.1345,,
+sched,schedule=dynamic,0.134,,
+padding,pad (1=64B aligned)=1,0.139,,
+padding,pad (1=64B aligned)=0,0.133,,
+parsplit,par_split=0,0.433,,
+parsplit,par_split=1,0.331999,,

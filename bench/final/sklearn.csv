@@ -1,0 +1,2 @@
+N,depth,min_leaf,fit_time,rmse_train,rmse_test,nodes
+1000000,6,20,41.6167,2.36844,2.36884,127
