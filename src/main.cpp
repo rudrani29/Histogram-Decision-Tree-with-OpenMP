@@ -48,6 +48,8 @@ int main(int argc, char **argv)
             p.dynamic_sched = (v == "dynamic");
         else if (k == "--cutoff")
             p.omp_cutoff = std::stoi(v);
+        else if (k == "--pad")
+            p.pad = std::stoi(v);
         else if (k == "--out")
             out = v;
     }
@@ -84,7 +86,9 @@ int main(int argc, char **argv)
         // The hook: serial histogram now; build_hist_omp plugs in here later.
         HistFn hist_fn = [](const Dataset &d, const std::vector<int> &r)
         { return build_hist(d, r); };
-        if (p.hist_omp) hist_fn = [&p](const Dataset &d, const std::vector<int> &r) { return build_hist_omp(d, r, p); };
+        if (p.hist_omp)
+            hist_fn = [&p](const Dataset &d, const std::vector<int> &r)
+            { return build_hist_omp(d, r, p); };
 
         t0 = omp_get_wtime();
         Tree tree = train_tree(ds, p, hist_fn, n_train);
@@ -98,7 +102,7 @@ int main(int argc, char **argv)
     std::ostringstream row;
     row << mode << "," << bins << "," << ds.N << "," << p.threads << "," << p.max_depth << ","
         << p.use_subtraction << "," << p.par_split << "," << p.hist_omp << ","
-        << (p.dynamic_sched ? "dynamic" : "static") << "," << p.omp_cutoff << ","
+        << (p.dynamic_sched ? "dynamic" : "static") << "," << p.omp_cutoff << "," << p.pad << ","
         << bin_time << "," << train_time << "," << st.hist_s << "," << st.split_s << "," << st.part_s << ","
         << rtr << "," << rte << "," << nnodes;
     std::cout << "mode=" << mode << " bins=" << bins << " N=" << ds.N << " threads=" << p.threads
@@ -107,7 +111,7 @@ int main(int argc, char **argv)
               << " rmse_train=" << rtr << " rmse_test=" << rte << " nodes=" << nnodes << "\n";
     if (!out.empty())
         append_csv(out,
-                   "mode,bins,N,threads,depth,subtraction,par_split,hist_omp,schedule,cutoff,"
+                   "mode,bins,N,threads,depth,subtraction,par_split,hist_omp,schedule,cutoff,pad,"
                    "bin_time,train_time,hist_time,split_time,part_time,rmse_train,rmse_test,nodes",
                    row.str());
 }

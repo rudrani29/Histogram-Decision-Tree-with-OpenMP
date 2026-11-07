@@ -38,6 +38,7 @@ struct Params
     bool hist_omp = false;      // use build_hist_omp instead of build_hist
     int threads = 1;            // OpenMP threads
     bool dynamic_sched = false; // static (default) vs dynamic row scheduling
+    bool pad = true;            // 64-byte-aligned private histograms (false = deliberately misaligned)
     int omp_cutoff = 2048;      // nodes with fewer rows than this use the serial build_hist
 };
 

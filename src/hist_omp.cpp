@@ -16,14 +16,16 @@ namespace
         std::vector<Bin> storage;
         Bin *ptr = nullptr;
         size_t n = 0;
-        void ensure(size_t nbins)
+        bool aligned = true;
+        void ensure(size_t nbins, bool pad)
         {
-            if (n == nbins)
+            if (n == nbins && aligned == pad)
                 return;
-            storage.assign(nbins + 4, Bin()); // 4 extra bins (64 B) of slack for alignment
+            storage.assign(nbins + 8, Bin()); // 8 extra bins (128 B) of slack
             uintptr_t a = ((uintptr_t)storage.data() + 63) & ~(uintptr_t)63;
-            ptr = (Bin *)a;
+            ptr = (Bin *)(pad ? a : a + 16); // pad=false: start 16 B past a cache-line boundary
             n = nbins;
+            aligned = pad;
         }
     };
     std::vector<PrivHist> g_pool; // allocated once, reused by every node (avoids 127 x T allocations)
@@ -41,7 +43,7 @@ Hist build_hist_omp(const Dataset &ds, const std::vector<int> &rows, const Param
     if ((int)g_pool.size() < T)
         g_pool.resize(T);
     for (int t = 0; t < T; ++t)
-        g_pool[t].ensure(nb);
+        g_pool[t].ensure(nb, p.pad);
 
     Hist out(nb);
     const int n = (int)rows.size();

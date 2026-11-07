@@ -33,22 +33,24 @@ int main()
         Hist ref = build_hist(ds, *rows);
         for (int T : {1, 2, 3, 4, 8})
             for (int dyn = 0; dyn < 2; ++dyn)
-            {
-                Params p;
-                p.threads = T;
-                p.dynamic_sched = dyn;
-                p.omp_cutoff = 2048;
-                Hist h = build_hist_omp(ds, *rows, p);
-                ++runs;
-                for (size_t j = 0; j < ref.size(); ++j)
-                    if (h[j].cnt != ref[j].cnt ||
-                        std::fabs(h[j].sum_y - ref[j].sum_y) > 1e-9 * (1 + std::fabs(ref[j].sum_y)))
-                    {
-                        printf("MISMATCH rows=%zu T=%d dyn=%d bin=%zu\n", rows->size(), T, dyn, j);
-                        ++bad;
-                        break;
-                    }
-            }
+                for (int pad = 0; pad < 2; ++pad)
+                {
+                    Params p;
+                    p.threads = T;
+                    p.dynamic_sched = dyn;
+                    p.pad = pad;
+                    p.omp_cutoff = 2048;
+                    Hist h = build_hist_omp(ds, *rows, p);
+                    ++runs;
+                    for (size_t j = 0; j < ref.size(); ++j)
+                        if (h[j].cnt != ref[j].cnt ||
+                            std::fabs(h[j].sum_y - ref[j].sum_y) > 1e-9 * (1 + std::fabs(ref[j].sum_y)))
+                        {
+                            printf("MISMATCH rows=%zu T=%d dyn=%d bin=%zu\n", rows->size(), T, dyn, j);
+                            ++bad;
+                            break;
+                        }
+                }
     }
     printf("%d/%d configurations match build_hist\n", runs - bad, runs);
     puts(bad ? "FAILED" : "ALL TESTS PASSED");
